@@ -3,8 +3,6 @@
 Launch in your browser (no install):
 
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/c-abird/scikit-fem-tutorial/HEAD)
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/c-abird/scikit-fem-tutorial/blob/HEAD/notebooks/01_poisson_1d.ipynb)
-[![Open in Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/c-abird/scikit-fem-tutorial)
 
 This repository contains minimal Jupyter notebooks for a hands-on introduction to finite elements with scikit-fem, designed to run in the browser without any local installation.
 
@@ -13,7 +11,6 @@ This repository contains minimal Jupyter notebooks for a hands-on introduction t
 
 ## How to use (no install)
 - Click the Binder badge above to launch a live Jupyter session with all dependencies preinstalled.
-- If Binder is slow or rate-limited, try Colab (first cell installs packages) or Codespaces.
 
 ## Local run (optional)
 If you prefer local execution:
