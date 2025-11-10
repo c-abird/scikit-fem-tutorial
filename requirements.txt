@@ -1,0 +1,6 @@
+scikit-fem
+numpy
+scipy
+meshio
+meshzoo
+matplotlib
