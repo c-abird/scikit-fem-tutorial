@@ -92,22 +92,19 @@ def solve_heat_2d(n=20, plot=True):
     unique_nodes, unique_indices = np.unique(all_boundary_nodes, return_index=True)
     unique_values = all_boundary_values[unique_indices]
 
-    # Build full Dirichlet vector so condense() can index it safely
-    dirichlet_vector = np.zeros(A.shape[0])
-    dirichlet_vector[unique_nodes] = unique_values
+    # Apply boundary conditions using manual matrix modification
+    # Convert to dense matrix for easier manipulation
+    A_dense = A.toarray()
     
-    # Use condense to eliminate Dirichlet DOFs (pass them as D, not I)
-    A_condensed, b_condensed, _, interior_dofs = fem.condense(
-        A, b, D=unique_nodes, x=dirichlet_vector
-    )
+    # Apply boundary conditions: A[i,:] = 0; A[i,i] = 1; b[i] = value
+    for i in unique_nodes:
+        A_dense[i, :] = 0
+        A_dense[i, i] = 1
+        b[i] = unique_values[np.where(unique_nodes == i)[0][0]]
     
-    # Solve the condensed system
+    # Solve the system
     print("Solving linear system...")
-    u_interior = fem.solve(A_condensed, b_condensed)
-    
-    # Reconstruct full solution
-    u = dirichlet_vector.copy()
-    u[interior_dofs] = u_interior  # Set interior values
+    u = np.linalg.solve(A_dense, b)
     
     print(f"Solution computed with {len(u)} degrees of freedom")
     print(f"Solution range: [{u.min():.3f}, {u.max():.3f}]")
