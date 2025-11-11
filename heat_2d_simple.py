@@ -79,21 +79,22 @@ def solve_heat_2d(n=20, plot=True):
     
     print(f"Boundary nodes: bottom={len(bottom)}, top={len(top)}, left={len(left)}, right={len(right)}")
     
-    # Create boundary condition dictionary
-    boundary_conditions = {}
+    # Create boundary condition arrays
+    # Combine all boundary nodes and remove duplicates
+    all_boundary_nodes = np.unique(np.concatenate([bottom, top, left, right]))
+    
+    # Create corresponding boundary values
+    boundary_values = np.zeros(len(all_boundary_nodes))
     
     # Set boundary values: bottom = 1.0, others = 0.0
-    for node in bottom:
-        boundary_conditions[node] = 1.0  # Hot bottom edge
-    for node in top:
-        boundary_conditions[node] = 0.0  # Cold top edge
-    for node in left:
-        boundary_conditions[node] = 0.0  # Cold left edge
-    for node in right:
-        boundary_conditions[node] = 0.0  # Cold right edge
+    for i, node in enumerate(all_boundary_nodes):
+        if node in bottom:
+            boundary_values[i] = 1.0  # Hot bottom edge
+        else:
+            boundary_values[i] = 0.0  # Cold other edges
     
     # Use condense to apply boundary conditions
-    A_condensed, b_condensed = fem.condense(A, b, D=boundary_conditions)
+    A_condensed, b_condensed = fem.condense(A, b, I=all_boundary_nodes, x=boundary_values)
     
     # Step 5: Solve the condensed system
     print("Solving linear system...")
@@ -102,10 +103,9 @@ def solve_heat_2d(n=20, plot=True):
     # Reconstruct full solution
     u = np.zeros(A.shape[0])
     # Set boundary values
-    for node, value in boundary_conditions.items():
-        u[node] = value
+    u[all_boundary_nodes] = boundary_values
     # Set interior values
-    interior_dofs = np.setdiff1d(np.arange(A.shape[0]), list(boundary_conditions.keys()))
+    interior_dofs = np.setdiff1d(np.arange(A.shape[0]), all_boundary_nodes)
     u[interior_dofs] = u_condensed
     
     print(f"Solution computed with {len(u)} degrees of freedom")
