@@ -91,18 +91,22 @@ def solve_heat_2d(n=20, plot=True):
     # Remove duplicates (corner nodes appear in multiple boundary arrays)
     unique_nodes, unique_indices = np.unique(all_boundary_nodes, return_index=True)
     unique_values = all_boundary_values[unique_indices]
+
+    # Build full Dirichlet vector so condense() can index it safely
+    dirichlet_vector = np.zeros(A.shape[0])
+    dirichlet_vector[unique_nodes] = unique_values
     
-    # Use condense to apply boundary conditions
-    A_condensed, b_condensed = fem.condense(A, b, I=unique_nodes, x=unique_values)
+    # Use condense to eliminate Dirichlet DOFs (pass them as D, not I)
+    A_condensed, b_condensed, _, interior_dofs = fem.condense(
+        A, b, D=unique_nodes, x=dirichlet_vector
+    )
     
     # Solve the condensed system
     print("Solving linear system...")
     u_interior = fem.solve(A_condensed, b_condensed)
     
     # Reconstruct full solution
-    u = np.zeros(A.shape[0])
-    u[unique_nodes] = unique_values  # Set boundary values
-    interior_dofs = np.setdiff1d(np.arange(A.shape[0]), unique_nodes)
+    u = dirichlet_vector.copy()
     u[interior_dofs] = u_interior  # Set interior values
     
     print(f"Solution computed with {len(u)} degrees of freedom")
