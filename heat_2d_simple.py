@@ -79,33 +79,34 @@ def solve_heat_2d(n=20, plot=True):
     
     print(f"Boundary nodes: bottom={len(bottom)}, top={len(top)}, left={len(left)}, right={len(right)}")
     
-    # Create boundary condition arrays (handle corner node duplicates)
-    # Combine all boundary nodes and remove duplicates
-    all_boundary_nodes = np.unique(np.concatenate([bottom, top, left, right]))
-    
-    # Create corresponding boundary values
-    boundary_values = np.zeros(len(all_boundary_nodes))
+    # Create boundary condition dictionary
+    boundary_conditions = {}
     
     # Set boundary values: bottom = 1.0, others = 0.0
-    for i, node in enumerate(all_boundary_nodes):
-        if node in bottom:
-            boundary_values[i] = 1.0  # Hot bottom edge
-        else:
-            boundary_values[i] = 0.0  # Cold other edges
+    for node in bottom:
+        boundary_conditions[node] = 1.0  # Hot bottom edge
+    for node in top:
+        boundary_conditions[node] = 0.0  # Cold top edge
+    for node in left:
+        boundary_conditions[node] = 0.0  # Cold left edge
+    for node in right:
+        boundary_conditions[node] = 0.0  # Cold right edge
     
     # Use condense to apply boundary conditions
-    # Pass boundary nodes and values as separate arrays
-    A_condensed, b_condensed = fem.condense(A, b, I=all_boundary_nodes, x=boundary_values)
+    A_condensed, b_condensed = fem.condense(A, b, D=boundary_conditions)
     
     # Step 5: Solve the condensed system
     print("Solving linear system...")
-    u_interior = fem.solve(A_condensed, b_condensed)
+    u_condensed = fem.solve(A_condensed, b_condensed)
     
     # Reconstruct full solution
     u = np.zeros(A.shape[0])
-    u[all_boundary_nodes] = boundary_values
-    interior_dofs = np.setdiff1d(np.arange(A.shape[0]), all_boundary_nodes)
-    u[interior_dofs] = u_interior
+    # Set boundary values
+    for node, value in boundary_conditions.items():
+        u[node] = value
+    # Set interior values
+    interior_dofs = np.setdiff1d(np.arange(A.shape[0]), list(boundary_conditions.keys()))
+    u[interior_dofs] = u_condensed
     
     print(f"Solution computed with {len(u)} degrees of freedom")
     print(f"Solution range: [{u.min():.3f}, {u.max():.3f}]")
