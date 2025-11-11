@@ -79,34 +79,22 @@ def solve_heat_2d(n=20, plot=True):
     
     print(f"Boundary nodes: bottom={len(bottom)}, top={len(top)}, left={len(left)}, right={len(right)}")
     
-    # Create boundary condition dictionary
-    boundary_conditions = {}
+    # Combine all boundary nodes and their values
+    all_boundary_nodes = np.concatenate([bottom, top, left, right])
+    all_boundary_values = np.concatenate([
+        np.ones(len(bottom)),      # bottom = 1.0 (hot)
+        np.zeros(len(top)),        # top = 0.0 (cold)
+        np.zeros(len(left)),       # left = 0.0 (cold)
+        np.zeros(len(right))       # right = 0.0 (cold)
+    ])
     
-    # Set boundary values: bottom = 1.0, others = 0.0
-    for node in bottom:
-        boundary_conditions[node] = 1.0  # Hot bottom edge
-    for node in top:
-        boundary_conditions[node] = 0.0  # Cold top edge
-    for node in left:
-        boundary_conditions[node] = 0.0  # Cold left edge
-    for node in right:
-        boundary_conditions[node] = 0.0  # Cold right edge
+    # Remove duplicates (corner nodes appear in multiple boundary arrays)
+    unique_nodes, unique_indices = np.unique(all_boundary_nodes, return_index=True)
+    unique_values = all_boundary_values[unique_indices]
     
-    # Use condense to apply boundary conditions
-    A_condensed, b_condensed = fem.condense(A, b, D=boundary_conditions)
-    
-    # Step 5: Solve the condensed system
+    # Use solve with boundary conditions
     print("Solving linear system...")
-    u_condensed = fem.solve(A_condensed, b_condensed)
-    
-    # Reconstruct full solution
-    u = np.zeros(A.shape[0])
-    # Set boundary values
-    for node, value in boundary_conditions.items():
-        u[node] = value
-    # Set interior values
-    interior_dofs = np.setdiff1d(np.arange(A.shape[0]), list(boundary_conditions.keys()))
-    u[interior_dofs] = u_condensed
+    u = fem.solve(A, b, I=unique_nodes, x=unique_values)
     
     print(f"Solution computed with {len(u)} degrees of freedom")
     print(f"Solution range: [{u.min():.3f}, {u.max():.3f}]")
