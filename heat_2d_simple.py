@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 """
-2D Heat Equation Solver using scikit-fem
+2D Heat Equation Solver with Mixed Boundary Conditions
 
-Solves the steady-state heat equation (Laplace equation) on a unit square:
-    -Δu = 0,  (x,y) ∈ (0,1)²
+Comprehensive implementation demonstrating:
+1. Dirichlet boundary conditions (prescribed temperature)
+2. Neumann boundary conditions (prescribed heat flux)
+3. Mixed boundary condition problems
+4. Various heat source configurations
 
-with Dirichlet boundary conditions:
-    - u(x,0) = 1 (bottom edge: hot)
-    - u(x,1) = 0 (top edge: cold)
-    - u(0,y) = 0 (left edge: cold)
-    - u(1,y) = 0 (right edge: cold)
-
-Uses scikit-fem's condense() method for clean boundary condition handling.
+Based on the scikit-fem tutorial notebook for 2D heat equation.
 """
 
 import numpy as np
@@ -20,103 +17,229 @@ import skfem as fem
 from skfem.helpers import *
 
 
-def solve_heat_2d(n=20, plot=True):
+def solve_heat_2d_dirichlet(n=20, plot=True):
     """
-    Solve the 2D heat equation on a unit square.
+    Solve 2D heat equation with pure Dirichlet boundary conditions.
     
-    Parameters:
-    -----------
-    n : int
-        Number of subdivisions per direction (default: 20)
-    plot : bool
-        Whether to create visualization plots (default: True)
-        
-    Returns:
-    --------
-    mesh : skfem.MeshTri
-        The triangular mesh
-    u : numpy.ndarray
-        Solution vector
+    Problem: -Δu = 0 on unit square with:
+    - u(x,0) = 1 (bottom: hot)
+    - u(x,1) = 0 (top: cold)  
+    - u(0,y) = 0 (left: cold)
+    - u(1,y) = 0 (right: cold)
     """
+    print(f"\n=== Dirichlet Problem (n={n}) ===")
     
-    # Step 1: Create mesh and function space
-    print(f"Creating {n}x{n} triangular mesh...")
+    # Create mesh and function space
     mesh = fem.MeshTri.init_tensor(np.linspace(0, 1, n+1), np.linspace(0, 1, n+1))
     V = fem.Basis(mesh, fem.ElementTriP1())
     
-    print(f"Mesh has {mesh.p.shape[1]} nodes and {mesh.t.shape[1]} triangles")
+    print(f"Mesh: {mesh.p.shape[1]} nodes, {mesh.t.shape[1]} triangles")
     
-    # Step 2: Define variational forms
+    # Define variational forms
     @fem.BilinearForm
-    def bilinear_form(u, v, _):
-        """Bilinear form: ∫ ∇u · ∇v dx dy"""
+    def a(u, v, _):
         return dot(grad(u), grad(v))
     
     @fem.LinearForm  
-    def linear_form(v, _):
-        """Linear form: ∫ 0 * v dx dy (no source term)"""
-        return 0.0 * v
+    def L(v, _):
+        return 0.0 * v  # No source term
     
-    # Step 3: Assemble system
-    print("Assembling stiffness matrix and load vector...")
-    A = bilinear_form.assemble(V)
-    b = linear_form.assemble(V)
+    # Assemble system
+    A = a.assemble(V)
+    b = L.assemble(V)
     
-    print(f"System size: {A.shape[0]} x {A.shape[1]}")
-    
-    # Step 4: Apply boundary conditions using condense()
-    print("Applying boundary conditions...")
-    
-    # Get node coordinates
+    # Apply Dirichlet boundary conditions
     x, y = mesh.p[0], mesh.p[1]
-    
-    # Find boundary nodes
     tol = 1e-12
-    bottom = np.where(np.abs(y) < tol)[0]          # y = 0 (hot)
-    top = np.where(np.abs(y - 1.0) < tol)[0]       # y = 1 (cold)
-    left = np.where(np.abs(x) < tol)[0]            # x = 0 (cold)
-    right = np.where(np.abs(x - 1.0) < tol)[0]     # x = 1 (cold)
     
-    print(f"Boundary nodes: bottom={len(bottom)}, top={len(top)}, left={len(left)}, right={len(right)}")
+    bottom = np.where(np.abs(y) < tol)[0]
+    top = np.where(np.abs(y - 1.0) < tol)[0]
+    left = np.where(np.abs(x) < tol)[0]
+    right = np.where(np.abs(x - 1.0) < tol)[0]
     
-    # Combine all boundary nodes and their values
-    all_boundary_nodes = np.concatenate([bottom, top, left, right])
-    all_boundary_values = np.concatenate([
-        np.ones(len(bottom)),      # bottom = 1.0 (hot)
-        np.zeros(len(top)),        # top = 0.0 (cold)
-        np.zeros(len(left)),       # left = 0.0 (cold)
-        np.zeros(len(right))       # right = 0.0 (cold)
-    ])
-    
-    # Remove duplicates (corner nodes appear in multiple boundary arrays)
-    unique_nodes, unique_indices = np.unique(all_boundary_nodes, return_index=True)
-    unique_values = all_boundary_values[unique_indices]
-
-    # Apply boundary conditions using manual matrix modification
-    # Convert to dense matrix for easier manipulation
+    # Manual boundary condition application
     A_dense = A.toarray()
     
-    # Apply boundary conditions: A[i,:] = 0; A[i,i] = 1; b[i] = value
-    for i in unique_nodes:
+    # Bottom edge: u = 1 (hot)
+    for i in bottom:
         A_dense[i, :] = 0
         A_dense[i, i] = 1
-        b[i] = unique_values[np.where(unique_nodes == i)[0][0]]
+        b[i] = 1.0
     
-    # Solve the system
-    print("Solving linear system...")
+    # Other edges: u = 0 (cold)
+    for boundary_nodes in [top, left, right]:
+        for i in boundary_nodes:
+            A_dense[i, :] = 0
+            A_dense[i, i] = 1
+            b[i] = 0.0
+    
+    # Solve
     u = np.linalg.solve(A_dense, b)
     
-    print(f"Solution computed with {len(u)} degrees of freedom")
     print(f"Solution range: [{u.min():.3f}, {u.max():.3f}]")
     
-    # Step 6: Visualization
     if plot:
-        create_plots(mesh, u)
+        plot_solution(mesh, u, "Dirichlet BC: Hot Bottom, Cold Sides")
     
     return mesh, u
 
 
-def create_plots(mesh, u):
+def solve_heat_2d_mixed(n=20, plot=True):
+    """
+    Solve 2D heat equation with mixed boundary conditions.
+    
+    Problem: -Δu = 0 on unit square with:
+    - u(0,y) = 1 (left: Dirichlet, hot)
+    - ∂u/∂n = -2 on right edge (Neumann, heat flux out)
+    - ∂u/∂n = 0 on top/bottom (Neumann, insulated)
+    """
+    print(f"\n=== Mixed BC Problem (n={n}) ===")
+    
+    # Create mesh and function space
+    mesh = fem.MeshTri.init_tensor(np.linspace(0, 1, n+1), np.linspace(0, 1, n+1))
+    V = fem.Basis(mesh, fem.ElementTriP1())
+    
+    # Define variational forms
+    @fem.BilinearForm
+    def a(u, v, _):
+        return dot(grad(u), grad(v))
+    
+    @fem.LinearForm  
+    def L(v, _):
+        return 0.0 * v  # No volume source
+    
+    # Assemble system
+    A = a.assemble(V)
+    b = L.assemble(V)
+    
+    # Add Neumann boundary conditions (heat flux on right edge)
+    # Find boundary elements on right edge (x = 1)
+    x, y = mesh.p[0], mesh.p[1]
+    tol = 1e-12
+    
+    # Get boundary mesh
+    boundary_mesh = mesh.boundary()
+    
+    # Find right edge elements
+    right_elements = []
+    for i, elem in enumerate(boundary_mesh.t.T):
+        edge_coords = boundary_mesh.p[:, elem]
+        if np.all(np.abs(edge_coords[0] - 1.0) < tol):
+            right_elements.append(i)
+    
+    if right_elements:
+        # Create boundary basis for right edge
+        right_mesh = fem.MeshLine(
+            boundary_mesh.p[:, boundary_mesh.t[:, right_elements].flatten()],
+            np.arange(len(boundary_mesh.t[:, right_elements].flatten())).reshape(-1, 2)
+        )
+        
+        # Simplified approach: add flux contribution directly
+        # For right edge with outward normal (1,0), flux = -∂u/∂x = -2
+        # This contributes ∫ g*v ds = ∫ (-2)*v ds to the load vector
+        
+        # Find nodes on right edge
+        right_nodes = np.where(np.abs(x - 1.0) < tol)[0]
+        
+        # Add flux contribution (simplified integration)
+        edge_length = 1.0 / (n)  # approximate edge length
+        for i in right_nodes:
+            b[i] += -2.0 * edge_length / 2  # flux * edge_length / 2 (linear elements)
+    
+    # Apply Dirichlet boundary condition on left edge
+    left = np.where(np.abs(x) < tol)[0]
+    
+    A_dense = A.toarray()
+    
+    # Left edge: u = 1 (Dirichlet)
+    for i in left:
+        A_dense[i, :] = 0
+        A_dense[i, i] = 1
+        b[i] = 1.0
+    
+    # Solve
+    u = np.linalg.solve(A_dense, b)
+    
+    print(f"Solution range: [{u.min():.3f}, {u.max():.3f}]")
+    
+    if plot:
+        plot_solution(mesh, u, "Mixed BC: Dirichlet Left, Neumann Right")
+    
+    return mesh, u
+
+
+def solve_heat_2d_source(n=20, source_type="uniform", plot=True):
+    """
+    Solve 2D heat equation with heat source.
+    
+    Problem: -Δu = f on unit square with homogeneous Dirichlet BC.
+    """
+    print(f"\n=== Heat Source Problem: {source_type} (n={n}) ===")
+    
+    # Create mesh and function space
+    mesh = fem.MeshTri.init_tensor(np.linspace(0, 1, n+1), np.linspace(0, 1, n+1))
+    V = fem.Basis(mesh, fem.ElementTriP1())
+    
+    # Define variational forms
+    @fem.BilinearForm
+    def a(u, v, _):
+        return dot(grad(u), grad(v))
+    
+    # Different source terms
+    if source_type == "uniform":
+        @fem.LinearForm  
+        def L(v, _):
+            return 1.0 * v  # Uniform heat generation
+    elif source_type == "localized":
+        @fem.LinearForm  
+        def L(v, w):
+            # Heat source in center square [0.4, 0.6] × [0.4, 0.6]
+            mask = ((w.x[0] > 0.4) & (w.x[0] < 0.6) & 
+                   (w.x[1] > 0.4) & (w.x[1] < 0.6))
+            return 10.0 * v * mask
+    elif source_type == "sinusoidal":
+        @fem.LinearForm  
+        def L(v, w):
+            return np.sin(np.pi * w.x[0]) * np.sin(np.pi * w.x[1]) * v
+    else:
+        @fem.LinearForm  
+        def L(v, _):
+            return 0.0 * v
+    
+    # Assemble system
+    A = a.assemble(V)
+    b = L.assemble(V)
+    
+    # Apply homogeneous Dirichlet BC on all boundaries
+    x, y = mesh.p[0], mesh.p[1]
+    tol = 1e-12
+    
+    boundary_nodes = np.unique(np.concatenate([
+        np.where(np.abs(y) < tol)[0],          # bottom
+        np.where(np.abs(y - 1.0) < tol)[0],    # top
+        np.where(np.abs(x) < tol)[0],          # left
+        np.where(np.abs(x - 1.0) < tol)[0]     # right
+    ]))
+    
+    A_dense = A.toarray()
+    
+    for i in boundary_nodes:
+        A_dense[i, :] = 0
+        A_dense[i, i] = 1
+        b[i] = 0.0
+    
+    # Solve
+    u = np.linalg.solve(A_dense, b)
+    
+    print(f"Solution range: [{u.min():.3f}, {u.max():.3f}]")
+    
+    if plot:
+        plot_solution(mesh, u, f"Heat Source: {source_type}")
+    
+    return mesh, u
+
+
+def plot_solution(mesh, u, title="Temperature Distribution"):
     """Create visualization plots for the solution."""
     
     x, y = mesh.p[0], mesh.p[1]
@@ -126,13 +249,13 @@ def create_plots(mesh, u):
     
     # Contour plot
     ax1 = axes[0]
-    levels = np.linspace(0, 1, 11)
+    levels = np.linspace(u.min(), u.max(), 11)
     cs = ax1.tricontourf(x, y, u, levels=levels, cmap='hot')
     ax1.tricontour(x, y, u, levels=levels, colors='black', alpha=0.3, linewidths=0.5)
     plt.colorbar(cs, ax=ax1, label='Temperature')
     ax1.set_xlabel('x')
     ax1.set_ylabel('y')
-    ax1.set_title('Temperature Distribution')
+    ax1.set_title(title)
     ax1.set_aspect('equal')
     
     # 3D surface plot
@@ -141,50 +264,76 @@ def create_plots(mesh, u):
     ax2.set_xlabel('x')
     ax2.set_ylabel('y')
     ax2.set_zlabel('Temperature')
-    ax2.set_title('3D Temperature Surface')
+    ax2.set_title('3D Surface')
     plt.colorbar(surf, ax=ax2, shrink=0.5)
     
     plt.tight_layout()
     plt.show()
+
+
+def convergence_study():
+    """Study mesh convergence for different problems."""
     
-    # Temperature profile along centerline (x=0.5)
-    plt.figure(figsize=(8, 4))
-    center_idx = np.where(np.abs(x - 0.5) < 0.02)[0]  # nodes near x=0.5
-    center_y = y[center_idx]
-    center_u = u[center_idx]
-    sort_idx = np.argsort(center_y)
+    print("\n" + "="*50)
+    print("MESH CONVERGENCE STUDY")
+    print("="*50)
     
-    plt.plot(center_y[sort_idx], center_u[sort_idx], 'o-', linewidth=2, markersize=6)
-    plt.xlabel('y (height)')
-    plt.ylabel('Temperature')
-    plt.title('Temperature Profile along Centerline (x=0.5)')
-    plt.grid(True, alpha=0.3)
-    plt.show()
+    n_values = [10, 20, 40]
+    
+    print("\n1. Dirichlet Problem Convergence:")
+    for n in n_values:
+        mesh, u = solve_heat_2d_dirichlet(n=n, plot=False)
+        print(f"  n={n:2d}: max={u.max():.6f}, min={u.min():.6f}, nodes={len(u)}")
+    
+    print("\n2. Mixed BC Problem Convergence:")
+    for n in n_values:
+        mesh, u = solve_heat_2d_mixed(n=n, plot=False)
+        print(f"  n={n:2d}: max={u.max():.6f}, min={u.min():.6f}, nodes={len(u)}")
 
 
 def main():
-    """Main function to run the heat equation solver."""
+    """Main function demonstrating various 2D heat equation problems."""
     
-    print("2D Heat Equation Solver")
-    print("=" * 40)
+    print("2D Heat Equation Solver - Comprehensive Examples")
+    print("="*60)
     
-    # Solve with default parameters
-    mesh, u = solve_heat_2d(n=20, plot=True)
+    # 1. Standard Dirichlet problem
+    print("\n1. DIRICHLET BOUNDARY CONDITIONS")
+    mesh1, u1 = solve_heat_2d_dirichlet(n=20, plot=True)
     
-    print("\nSolution completed successfully!")
-    print("\nKey features of the solution:")
-    print("- Temperature is 1.0 at the bottom edge (hot)")
-    print("- Temperature is 0.0 on other edges (cold)")
-    print("- Heat diffuses smoothly from bottom to top")
-    print("- Solution is symmetric about the vertical centerline")
+    # 2. Mixed boundary conditions
+    print("\n2. MIXED BOUNDARY CONDITIONS")
+    mesh2, u2 = solve_heat_2d_mixed(n=20, plot=True)
     
-    # Optional: solve with different mesh sizes for comparison
-    print("\nMesh refinement study:")
-    for n in [10, 20, 40]:
-        print(f"\nSolving with {n}x{n} mesh...")
-        mesh_n, u_n = solve_heat_2d(n=n, plot=False)
-        print(f"  Max temperature: {u_n.max():.6f}")
-        print(f"  Min temperature: {u_n.min():.6f}")
+    # 3. Heat source problems
+    print("\n3. HEAT SOURCE PROBLEMS")
+    
+    # Uniform source
+    mesh3a, u3a = solve_heat_2d_source(n=20, source_type="uniform", plot=True)
+    
+    # Localized source
+    mesh3b, u3b = solve_heat_2d_source(n=20, source_type="localized", plot=True)
+    
+    # Sinusoidal source
+    mesh3c, u3c = solve_heat_2d_source(n=20, source_type="sinusoidal", plot=True)
+    
+    # 4. Convergence study
+    convergence_study()
+    
+    print("\n" + "="*60)
+    print("SUMMARY")
+    print("="*60)
+    print("This script demonstrates:")
+    print("• Dirichlet boundary conditions (prescribed temperature)")
+    print("• Neumann boundary conditions (prescribed heat flux)")
+    print("• Mixed boundary condition problems")
+    print("• Various heat source configurations")
+    print("• Mesh convergence studies")
+    print("\nKey insights:")
+    print("• Neumann conditions modify the load vector, not the matrix")
+    print("• Mixed problems combine essential and natural boundary conditions")
+    print("• Heat sources create non-zero right-hand sides")
+    print("• Mesh refinement improves solution accuracy")
 
 
 if __name__ == "__main__":
