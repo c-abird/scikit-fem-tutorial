@@ -42,26 +42,32 @@ def main():
     # Save to VTU format
     mesh.save("result.vtu", point_data={'u': u})
 
-    # compute H
+
+    # experiments
+
+    # (1) compute H by projection
     u_field = V.interpolate(u)
     VV = fem.Basis(mesh, fem.ElementVector(fem.ElementTetP1()))
 
-    #@fem.BilinearForm
-    #def a(u, v, w):
-    #    return dot(u, v)
+    @fem.BilinearForm
+    def a(u, v, w):
+        return dot(u, v)
 
-    #@fem.LinearForm
-    #def L(v, w):
-    #    return dot(grad(u_field), v)
+    @fem.LinearForm
+    def L(v, w):
+        return dot(grad(u_field), v)
 
-    #A = a.assemble(VV)
-    #b = L.assemble(VV)
+    A = a.assemble(VV)
+    b = L.assemble(VV)
 
-    #H = fem.solve(A, b)
-    H = VV.project(grad(u_field))
+    H = fem.solve(A, b)
 
     mesh.save("result.vtu", point_data={'H': H.reshape(-1, 3)})
 
+    # (2) use predefined projec method of sciket fem
+    H = VV.project(grad(u_field))
+
+    mesh.save("result.vtu", point_data={'H': H.reshape(-1, 3)})
 
 if __name__ == "__main__":
     main()
