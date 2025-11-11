@@ -7,9 +7,11 @@ Solves the demagnetization potential problem on a 3D mesh loaded from GMSH:
 
 where:
 - φ is the demagnetization potential
-- m = (0, 0, 1) is the magnetization vector (uniform in z-direction)
-- The source term ∇·m is only active in the magnetic domain (region 1)
-- The air region (region 2) has no magnetization
+- m is a piecewise constant magnetization vector function:
+  * m = (0, 0, 1) in the magnetic domain (cube)
+  * m = (0, 0, 0) in the air region
+- The source term ∇·m creates jump discontinuities at material interfaces
+- This approach naturally restricts the magnetization to the magnetic domain
 
 This models the magnetic field outside a uniformly magnetized cube.
 """
@@ -46,36 +48,45 @@ def main():
     def laplace_form(u, v, _):
         return ddot(u.grad, v.grad)
 
+    # Define magnetization as a piecewise constant function
+    def magnetization_function(x, y, z):
+        """
+        Piecewise constant magnetization vector function.
+        Returns m = (0, 0, 1) inside the cube [-0.5, 0.5]³
+        Returns m = (0, 0, 0) outside (in air)
+        """
+        # Check if point is inside the cube [-0.5, 0.5]³
+        inside_cube = (np.abs(x) <= 0.5) & (np.abs(y) <= 0.5) & (np.abs(z) <= 0.5)
+        
+        # Initialize magnetization arrays
+        mx = np.zeros_like(x)
+        my = np.zeros_like(x) 
+        mz = np.zeros_like(x)
+        
+        # Set magnetization in magnetic domain
+        mz[inside_cube] = 1.0
+        
+        return mx, my, mz
+
     # Define linear form: ∫ m · ∇v dΩ (magnetization source)
-    # Only active in magnetic region (domain 1)
     @LinearForm
     def magnetization_form(v, w):
-        # Magnetization vector m = (0, 0, 1)
-        m = np.array([0.0, 0.0, 1.0])
-        # m · ∇v = m_z * ∂v/∂z
-        return m[2] * v.grad[2]  # Only z-component is non-zero
+        # Get coordinates at quadrature points
+        x, y, z = w.x[0], w.x[1], w.x[2]
+        
+        # Evaluate piecewise magnetization function
+        mx, my, mz = magnetization_function(x, y, z)
+        
+        # m · ∇v = mx * ∂v/∂x + my * ∂v/∂y + mz * ∂v/∂z
+        return mx * v.grad[0] + my * v.grad[1] + mz * v.grad[2]
 
     # Assemble stiffness matrix over entire domain
     A = asm(laplace_form, basis)
 
-    # Assemble load vector only over magnetic region (domain 1)
-    try:
-        # Try to use subdomain if available
-        if hasattr(m, 'subdomains') and '1' in m.subdomains:
-            # Create basis restricted to magnetic domain
-            basis_mag = basis.with_element(e).with_subdomain('1')
-            b = asm(magnetization_form, basis_mag)
-            print("Using subdomain-restricted assembly")
-        else:
-            # Fallback: assemble over entire domain
-            # (In practice, you'd need to identify magnetic elements)
-            b = asm(magnetization_form, basis)
-            print("Using full domain assembly (fallback)")
-    except Exception as e:
-        print(f"Subdomain assembly failed: {e}")
-        # Simple fallback: assemble over entire domain
-        b = asm(magnetization_form, basis)
-        print("Using full domain assembly")
+    # Assemble load vector over entire domain
+    # The piecewise magnetization function automatically restricts the source
+    b = asm(magnetization_form, basis)
+    print("Using piecewise magnetization function (automatically domain-restricted)")
 
     print(f"System size: {A.shape[0]} x {A.shape[1]}")
     print(f"Load vector norm: {np.linalg.norm(b):.3e}")
@@ -100,6 +111,12 @@ def main():
 
     print(f"Solution computed with {len(phi)} degrees of freedom")
     print(f"Solution range: [{phi.min():.6f}, {phi.max():.6f}]")
+    
+    # Verify magnetization restriction by checking source term distribution
+    x, y, z = m.p[0], m.p[1], m.p[2]
+    mx, my, mz = magnetization_function(x, y, z)
+    mag_nodes = np.sum(mz > 0)
+    print(f"Magnetization active at {mag_nodes} nodes out of {len(phi)} total")
 
     # Export solution to VTU file
     output_filename = 'demag_potential_3d.vtu'
