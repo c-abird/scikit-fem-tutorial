@@ -79,14 +79,19 @@ def solve_heat_2d(n=20, plot=True):
     
     print(f"Boundary nodes: bottom={len(bottom)}, top={len(top)}, left={len(left)}, right={len(right)}")
     
-    # Create boundary condition arrays
-    # Combine all boundary nodes
-    all_boundary_nodes = np.concatenate([bottom, top, left, right])
+    # Create boundary condition arrays (handle corner node duplicates)
+    # Combine all boundary nodes and remove duplicates
+    all_boundary_nodes = np.unique(np.concatenate([bottom, top, left, right]))
     
     # Create corresponding boundary values
     boundary_values = np.zeros(len(all_boundary_nodes))
-    boundary_values[:len(bottom)] = 1.0  # Hot bottom edge
-    # Other edges remain 0.0 (cold)
+    
+    # Set boundary values: bottom = 1.0, others = 0.0
+    for i, node in enumerate(all_boundary_nodes):
+        if node in bottom:
+            boundary_values[i] = 1.0  # Hot bottom edge
+        else:
+            boundary_values[i] = 0.0  # Cold other edges
     
     # Use condense to apply boundary conditions
     # Pass boundary nodes and values as separate arrays
