@@ -48,45 +48,33 @@ def main():
     def laplace_form(u, v, _):
         return ddot(u.grad, v.grad)
 
-    # Define magnetization as a piecewise constant function
-    def magnetization_function(x, y, z):
-        """
-        Piecewise constant magnetization vector function.
-        Returns m = (0, 0, 1) inside the cube [-0.5, 0.5]³
-        Returns m = (0, 0, 0) outside (in air)
-        """
-        # Check if point is inside the cube [-0.5, 0.5]³
-        inside_cube = (np.abs(x) <= 0.5) & (np.abs(y) <= 0.5) & (np.abs(z) <= 0.5)
-        
-        # Initialize magnetization arrays
-        mx = np.zeros_like(x)
-        my = np.zeros_like(x) 
-        mz = np.zeros_like(x)
-        
-        # Set magnetization in magnetic domain
-        mz[inside_cube] = 1.0
-        
-        return mx, my, mz
-
     # Define linear form: ∫ m · ∇v dΩ (magnetization source)
+    # Use mesh subdomain information to set magnetization
     @LinearForm
     def magnetization_form(v, w):
-        # Get coordinates at quadrature points
-        x, y, z = w.x[0], w.x[1], w.x[2]
-        
-        # Evaluate piecewise magnetization function
-        mx, my, mz = magnetization_function(x, y, z)
-        
-        # m · ∇v = mx * ∂v/∂x + my * ∂v/∂y + mz * ∂v/∂z
-        return mx * v.grad[0] + my * v.grad[1] + mz * v.grad[2]
+        # Magnetization vector m = (0, 0, 1) in magnetic domain, (0, 0, 0) in air
+        # The form will be assembled only over the magnetic subdomain
+        return v.grad[2]  # Only z-component is non-zero: mz = 1
 
     # Assemble stiffness matrix over entire domain
     A = asm(laplace_form, basis)
 
-    # Assemble load vector over entire domain
-    # The piecewise magnetization function automatically restricts the source
-    b = asm(magnetization_form, basis)
-    print("Using piecewise magnetization function (automatically domain-restricted)")
+    # Assemble load vector only over magnetic domain using subdomain information
+    if hasattr(m, 'subdomains') and 'magnetic' in m.subdomains:
+        # Create basis restricted to magnetic domain
+        basis_mag = basis.with_subdomain('magnetic')
+        b = asm(magnetization_form, basis_mag)
+        print("Using mesh subdomain 'magnetic' for magnetization source")
+    else:
+        # Fallback: try numeric subdomain tags
+        try:
+            basis_mag = basis.with_subdomain('1')
+            b = asm(magnetization_form, basis_mag)
+            print("Using mesh subdomain '1' for magnetization source")
+        except:
+            # Final fallback: assemble over entire domain
+            b = asm(magnetization_form, basis)
+            print("Warning: No subdomain found, using full domain assembly")
 
     print(f"System size: {A.shape[0]} x {A.shape[1]}")
     print(f"Load vector norm: {np.linalg.norm(b):.3e}")
@@ -112,11 +100,9 @@ def main():
     print(f"Solution computed with {len(phi)} degrees of freedom")
     print(f"Solution range: [{phi.min():.6f}, {phi.max():.6f}]")
     
-    # Verify magnetization restriction by checking source term distribution
-    x, y, z = m.p[0], m.p[1], m.p[2]
-    mx, my, mz = magnetization_function(x, y, z)
-    mag_nodes = np.sum(mz > 0)
-    print(f"Magnetization active at {mag_nodes} nodes out of {len(phi)} total")
+    # Verify magnetization restriction by checking load vector
+    nonzero_entries = np.sum(np.abs(b) > 1e-12)
+    print(f"Load vector has {nonzero_entries} non-zero entries out of {len(b)} total")
 
     # Export solution to VTU file
     output_filename = 'demag_potential_3d.vtu'
