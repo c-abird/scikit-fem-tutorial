@@ -84,6 +84,16 @@ def solve_heat_2d_dirichlet(n=20, plot=True):
     return mesh, u
 
 
+def solve_heat_2d(*args, **kwargs):
+    """
+    Backwards-compatible wrapper for the classic Dirichlet problem.
+
+    Several notebooks/scripts still import `solve_heat_2d`; keep delegating
+    to `solve_heat_2d_dirichlet` so those references keep working.
+    """
+    return solve_heat_2d_dirichlet(*args, **kwargs)
+
+
 def solve_heat_2d_mixed(n=20, plot=True):
     """
     Solve 2D heat equation with mixed boundary conditions.
@@ -113,38 +123,18 @@ def solve_heat_2d_mixed(n=20, plot=True):
     b = L.assemble(V)
     
     # Add Neumann boundary conditions (heat flux on right edge)
-    # Find boundary elements on right edge (x = 1)
     x, y = mesh.p[0], mesh.p[1]
     tol = 1e-12
-    
-    # Get boundary mesh
-    boundary_mesh = mesh.boundary()
-    
-    # Find right edge elements
-    right_elements = []
-    for i, elem in enumerate(boundary_mesh.t.T):
-        edge_coords = boundary_mesh.p[:, elem]
-        if np.all(np.abs(edge_coords[0] - 1.0) < tol):
-            right_elements.append(i)
-    
-    if right_elements:
-        # Create boundary basis for right edge
-        right_mesh = fem.MeshLine(
-            boundary_mesh.p[:, boundary_mesh.t[:, right_elements].flatten()],
-            np.arange(len(boundary_mesh.t[:, right_elements].flatten())).reshape(-1, 2)
-        )
-        
-        # Simplified approach: add flux contribution directly
-        # For right edge with outward normal (1,0), flux = -∂u/∂x = -2
-        # This contributes ∫ g*v ds = ∫ (-2)*v ds to the load vector
-        
-        # Find nodes on right edge
-        right_nodes = np.where(np.abs(x - 1.0) < tol)[0]
-        
-        # Add flux contribution (simplified integration)
-        edge_length = 1.0 / (n)  # approximate edge length
-        for i in right_nodes:
-            b[i] += -2.0 * edge_length / 2  # flux * edge_length / 2 (linear elements)
+
+    right_facets = mesh.facets_satisfying(lambda pts: np.abs(pts[0] - 1.0) < tol)
+    if right_facets.size:
+        fbasis = fem.FacetBasis(mesh, fem.ElementTriP1(), facets=right_facets)
+
+        @fem.LinearForm
+        def neumann_load(v, _):
+            return -2.0 * v  # prescribed outward flux
+
+        b += neumann_load.assemble(fbasis)
     
     # Apply Dirichlet boundary condition on left edge
     left = np.where(np.abs(x) < tol)[0]
