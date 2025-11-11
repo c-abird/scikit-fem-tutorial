@@ -92,9 +92,18 @@ def solve_heat_2d(n=20, plot=True):
     unique_nodes, unique_indices = np.unique(all_boundary_nodes, return_index=True)
     unique_values = all_boundary_values[unique_indices]
     
-    # Use solve with boundary conditions
+    # Use condense to apply boundary conditions
+    A_condensed, b_condensed = fem.condense(A, b, I=unique_nodes, x=unique_values)
+    
+    # Solve the condensed system
     print("Solving linear system...")
-    u = fem.solve(A, b, I=unique_nodes, x=unique_values)
+    u_interior = fem.solve(A_condensed, b_condensed)
+    
+    # Reconstruct full solution
+    u = np.zeros(A.shape[0])
+    u[unique_nodes] = unique_values  # Set boundary values
+    interior_dofs = np.setdiff1d(np.arange(A.shape[0]), unique_nodes)
+    u[interior_dofs] = u_interior  # Set interior values
     
     print(f"Solution computed with {len(u)} degrees of freedom")
     print(f"Solution range: [{u.min():.3f}, {u.max():.3f}]")
