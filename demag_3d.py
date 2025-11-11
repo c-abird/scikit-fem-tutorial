@@ -17,7 +17,7 @@ This models the magnetic field outside a uniformly magnetized cube.
 """
 
 import numpy as np
-from skfem import Mesh, Basis, ElementTetP1, asm
+from skfem import Mesh, Basis, ElementTetP1, ElementTetDG0, asm
 from skfem.helpers import *
 from skfem import BilinearForm, LinearForm
 from skfem.utils import condense
@@ -30,6 +30,10 @@ def main():
     m = Mesh.load('notebooks/files/cube_with_air.msh')
     e = ElementTetP1()
     basis = Basis(m, e)
+    
+    # Create DG0 basis for piecewise constant magnetization
+    e_dg0 = ElementTetDG0()
+    basis_dg0 = Basis(m, e_dg0)
 
     print(f"Mesh has {m.p.shape[1]} nodes and {m.t.shape[1]} tetrahedra")
     print(f"Mesh bounding box:")
@@ -48,33 +52,37 @@ def main():
     def laplace_form(u, v, _):
         return ddot(u.grad, v.grad)
 
+    # Create piecewise constant magnetization function using DG0 elements
+    magnetization_z = np.zeros(basis_dg0.N)
+    
+    # Set magnetization values based on subdomain information
+    if hasattr(m, 'subdomains') and 'magnetic' in m.subdomains:
+        # Get elements in magnetic subdomain
+        magnetic_elements = m.subdomains['magnetic']
+        magnetization_z[magnetic_elements] = 1.0
+        print(f"Set magnetization in {len(magnetic_elements)} magnetic elements")
+    elif hasattr(m, 'subdomains') and '1' in m.subdomains:
+        # Fallback to numeric subdomain tag
+        magnetic_elements = m.subdomains['1']
+        magnetization_z[magnetic_elements] = 1.0
+        print(f"Set magnetization in {len(magnetic_elements)} magnetic elements (subdomain '1')")
+    else:
+        print("Warning: No magnetic subdomain found, magnetization will be zero everywhere")
+    
     # Define linear form: ∫ m · ∇v dΩ (magnetization source)
-    # Use mesh subdomain information to set magnetization
     @LinearForm
     def magnetization_form(v, w):
-        # Magnetization vector m = (0, 0, 1) in magnetic domain, (0, 0, 0) in air
-        # The form will be assembled only over the magnetic subdomain
-        return v.grad[2]  # Only z-component is non-zero: mz = 1
+        # Interpolate DG0 magnetization to quadrature points
+        mz = basis_dg0.interpolate(magnetization_z)(w)
+        # m · ∇v = mz * ∂v/∂z (only z-component is non-zero)
+        return mz * v.grad[2]
 
     # Assemble stiffness matrix over entire domain
     A = asm(laplace_form, basis)
 
-    # Assemble load vector only over magnetic domain using subdomain information
-    if hasattr(m, 'subdomains') and 'magnetic' in m.subdomains:
-        # Create basis restricted to magnetic domain
-        basis_mag = basis.with_subdomain('magnetic')
-        b = asm(magnetization_form, basis_mag)
-        print("Using mesh subdomain 'magnetic' for magnetization source")
-    else:
-        # Fallback: try numeric subdomain tags
-        try:
-            basis_mag = basis.with_subdomain('1')
-            b = asm(magnetization_form, basis_mag)
-            print("Using mesh subdomain '1' for magnetization source")
-        except:
-            # Final fallback: assemble over entire domain
-            b = asm(magnetization_form, basis)
-            print("Warning: No subdomain found, using full domain assembly")
+    # Assemble load vector over full domain using piecewise constant magnetization
+    b = asm(magnetization_form, basis)
+    print("Using DG0 piecewise constant magnetization over full domain")
 
     print(f"System size: {A.shape[0]} x {A.shape[1]}")
     print(f"Load vector norm: {np.linalg.norm(b):.3e}")
@@ -100,9 +108,11 @@ def main():
     print(f"Solution computed with {len(phi)} degrees of freedom")
     print(f"Solution range: [{phi.min():.6f}, {phi.max():.6f}]")
     
-    # Verify magnetization restriction by checking load vector
+    # Verify magnetization restriction by checking load vector and DG0 function
     nonzero_entries = np.sum(np.abs(b) > 1e-12)
+    nonzero_mag = np.sum(np.abs(magnetization_z) > 1e-12)
     print(f"Load vector has {nonzero_entries} non-zero entries out of {len(b)} total")
+    print(f"Magnetization active in {nonzero_mag} elements out of {len(magnetization_z)} total")
 
     # Export solution to VTU file
     output_filename = 'demag_potential_3d.vtu'
@@ -111,9 +121,14 @@ def main():
     point_data = {
         'demagnetization_potential': phi
     }
+    
+    # Also save the magnetization as cell data for visualization
+    cell_data = {
+        'magnetization_z': magnetization_z
+    }
 
     # Save to VTU format
-    m.save(output_filename, point_data=point_data)
+    m.save(output_filename, point_data=point_data, cell_data=cell_data)
 
     print(f"Solution exported to {output_filename}")
     print(f"File contains:")
