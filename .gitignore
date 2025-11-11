@@ -8,3 +8,4 @@ env/
 *.local.ipynb
 .DS_Store
 .vscode/
+.aider*
