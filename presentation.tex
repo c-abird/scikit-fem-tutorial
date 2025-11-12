@@ -1,0 +1,139 @@
+\documentclass{beamer}
+\usetheme{Madrid}
+\usecolortheme{default}
+
+\title{Finite Element Methods with scikit-fem}
+\subtitle{Workshop Notebooks Overview}
+\author{Your Name}
+\date{\today}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Notebook 1: Poisson in 1D}
+\framesubtitle{Foundation: Linear Elements and Boundary Conditions}
+
+\textbf{Problem:} $-u''(x) = 1$ on $(0,1)$ with $u(0) = u(1) = 0$
+
+\textbf{Key Concepts:}
+\begin{itemize}
+    \item Weak formulation: $\int_0^1 u' v' \, dx = \int_0^1 1 \cdot v \, dx$
+    \item P1 linear elements on 1D mesh
+    \item Assembly of stiffness matrix and load vector
+    \item Dirichlet boundary condition enforcement
+\end{itemize}
+
+\textbf{Experiments:}
+\begin{itemize}
+    \item Mesh refinement and convergence study
+    \item Mixed Dirichlet/Neumann boundary conditions
+    \item Pure Neumann problems and matrix singularity
+    \item Solver comparison (direct vs. iterative)
+\end{itemize}
+
+\textbf{Exact Solution:} $u(x) = \frac{1}{2}x(1-x)$
+\end{frame}
+
+\begin{frame}
+\frametitle{Notebook 2: Heat Equation in 2D}
+\framesubtitle{Extension to Multi-Dimensional Problems}
+
+\textbf{Problem:} $-\Delta u = 0$ on unit square with mixed boundary conditions
+\begin{itemize}
+    \item Bottom edge: $u = 1$ (hot)
+    \item Other edges: $u = 0$ (cold)
+\end{itemize}
+
+\textbf{Key Concepts:}
+\begin{itemize}
+    \item 2D triangular mesh and P1 elements
+    \item Gradient dot product: $\nabla u \cdot \nabla v$
+    \item Boundary node identification in 2D
+    \item Heat diffusion visualization
+\end{itemize}
+
+\textbf{Experiments:}
+\begin{itemize}
+    \item Different Dirichlet boundary patterns
+    \item Mixed boundary conditions with Neumann flux
+    \item Heat source problems (uniform, localized, sinusoidal)
+    \item Mesh refinement studies
+\end{itemize}
+
+\textbf{Result:} Steady-state temperature field with corner effects
+\end{frame}
+
+\begin{frame}
+\frametitle{Notebook 3: Demagnetization in 3D}
+\framesubtitle{Advanced: Multi-Domain and Vector Fields}
+
+\textbf{Problem:} Magnetostatic potential from uniformly magnetized cube
+$$\int_{\Omega} \nabla u \cdot \nabla v \, dx = \int_{\Omega_{mag}} \mathbf{m} \cdot \nabla v \, dx$$
+
+\textbf{Key Concepts:}
+\begin{itemize}
+    \item 3D tetrahedral mesh with subdomains (magnet + air)
+    \item DG0 indicator functions for domain restriction
+    \item Vector magnetization $\mathbf{m} = (0, 0, 1)$
+    \item Homogeneous Dirichlet conditions on outer boundary
+\end{itemize}
+
+\textbf{Experiments:}
+\begin{itemize}
+    \item Manual L2 projection of magnetic field $\mathbf{H} = \nabla u$
+    \item Built-in projection using \texttt{Basis.project}
+    \item Custom geometry creation with Gmsh (cylindrical magnet)
+\end{itemize}
+
+\textbf{Application:} Stray field computation for magnetic materials
+\end{frame}
+
+\begin{frame}
+\frametitle{Workshop Learning Path}
+\framesubtitle{Progressive Complexity}
+
+\begin{columns}
+\begin{column}{0.3\textwidth}
+\textbf{1D Foundation}
+\begin{itemize}
+    \item Basic FEM concepts
+    \item Matrix assembly
+    \item Boundary conditions
+    \item Exact validation
+\end{itemize}
+\end{column}
+
+\begin{column}{0.3\textwidth}
+\textbf{2D Extension}
+\begin{itemize}
+    \item Multi-dimensional PDEs
+    \item Triangular elements
+    \item Complex boundaries
+    \item Visualization
+\end{itemize}
+\end{column}
+
+\begin{column}{0.3\textwidth}
+\textbf{3D Applications}
+\begin{itemize}
+    \item Real-world problems
+    \item Multi-domain physics
+    \item Vector fields
+    \item Advanced techniques
+\end{itemize}
+\end{column}
+\end{columns}
+
+\vspace{1cm}
+\textbf{Common Thread:} scikit-fem's consistent API across dimensions
+\begin{itemize}
+    \item \texttt{@BilinearForm} and \texttt{@LinearForm} decorators
+    \item Assembly with \texttt{.assemble(basis)}
+    \item Boundary condition handling
+    \item Built-in solvers and post-processing
+\end{itemize}
+\end{frame}
+
+\end{document}
